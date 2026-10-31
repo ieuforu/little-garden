@@ -1,10 +1,12 @@
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("installer", Path(__file__).with_name("install_host.py"))
 installer = importlib.util.module_from_spec(spec)
@@ -102,6 +104,26 @@ class HostInstallerTests(unittest.TestCase):
         self.assertEqual(installer.select_subnet(["172.30.21.0/24", "172.30.22.0/28", "172.24.0.0/16"]), "172.30.23.0/28")
         with self.assertRaises(RuntimeError):
             installer.select_subnet(["172.16.0.0/12"])
+
+    def test_docker_null_ipam_configs_do_not_hide_existing_subnets(self):
+        networks = [
+            {"Name": "host", "IPAM": {"Config": None}},
+            {"Name": "none", "IPAM": {"Config": None}},
+            {"Name": "missing-config", "IPAM": {}},
+            {"Name": "null-ipam", "IPAM": None},
+            {"Name": "missing-ipam"},
+            {"Name": "empty-config", "IPAM": {"Config": []}},
+            {"Name": "occupied", "IPAM": {"Config": [{"Subnet": "172.30.21.0/28"}]}},
+            {"Name": "postgres", "IPAM": {"Config": [{"Subnet": "172.18.0.0/16"}]}},
+        ]
+        routes = [{"dst": "default"}, {"dst": "172.30.22.0/24"}]
+        with patch.object(installer, "run", side_effect=["networks", json.dumps(networks), json.dumps(routes)]) as command:
+            self.assertEqual(installer.available_subnet(), "172.30.23.0/28")
+        self.assertEqual(command.call_args_list[-1].args, ("ip", "-json", "route", "show", "table", "all"))
+
+    def test_no_docker_networks_still_respect_host_routes(self):
+        with patch.object(installer, "run", side_effect=["", '[{"dst":"172.30.21.0/24"}]']):
+            self.assertEqual(installer.available_subnet(), "172.30.22.0/28")
 
     def test_reads_active_config_path_without_assuming_etc_caddy(self):
         self.assertEqual(installer.config_from_args(["caddy", "run", "--config", "/srv/proxy/Caddyfile"], "/"), Path("/srv/proxy/Caddyfile"))

@@ -109,15 +109,20 @@ class OfflineTests(unittest.TestCase):
         (self.assets / "SHA256SUMS").write_text("".join(
             f"{install_host.digest(self.assets / name)}  {name}\n" for name in install_host.ASSET_NAMES))
         installed = self.root / "installed"
-        installed.mkdir()
         caddyfile = self.root / "Caddyfile"
         caddyfile.write_text("existing.example.com { respond ok }\n")
         original = caddyfile.read_bytes()
-        state = {"commit": self.commit, "domain": "garden.example.com", "caddyfile": str(caddyfile),
-                 "subnet": "172.30.21.0/28"}
-        (installed / "install-state.json").write_text(json.dumps(state))
-        argv = ["--domain", state["domain"], "--commit", self.commit, "--directory", str(installed), "--prepare-only"]
+        argv = ["--domain", "garden.example.com", "--commit", self.commit, "--directory", str(installed), "--prepare-only"]
         handles = []
+        def command(*args):
+            if args[:3] == ("docker", "network", "ls"):
+                return "host\nnone\nexisting"
+            if args[:3] == ("docker", "network", "inspect"):
+                return json.dumps([{"IPAM": {"Config": None}}, {"IPAM": {"Config": None}},
+                                   {"IPAM": {"Config": [{"Subnet": "172.30.21.0/28"}]}}])
+            if args[0] == "ip":
+                return '[{"dst":"172.30.22.0/24"}]'
+            return ""
         def local_open(path, *args, **kwargs):
             if path == "/run/lock/little-garden-install.lock":
                 handle = builtins.open(self.root / "lock", *args, **kwargs)
@@ -126,8 +131,10 @@ class OfflineTests(unittest.TestCase):
             return builtins.open(path, *args, **kwargs)
         with ExitStack() as stack, redirect_stdout(io.StringIO()) as output:
             for name, value in {"os.geteuid": 0, "platform.system": "Linux", "platform.machine": "x86_64",
-                                "shutil.which": "/mock", "run": "", "caddy_context": (caddyfile, {})}.items():
+                                "shutil.which": "/mock", "caddy_context": (caddyfile, {})}.items():
                 stack.enter_context(patch("install_host." + name, return_value=value))
+            stack.enter_context(patch.object(install_host, "run", side_effect=command))
+            stack.enter_context(patch.object(install_host.socket, "socket"))
             stack.enter_context(patch.object(install_host.fcntl, "flock"))
             stack.enter_context(patch.object(install_host.os, "umask"))
             stack.enter_context(patch.object(install_host, "open", side_effect=local_open, create=True))
@@ -140,6 +147,7 @@ class OfflineTests(unittest.TestCase):
                 for handle in handles:
                     handle.close()
         self.assertTrue(json.loads((installed / "install-state.json").read_text())["offline"])
+        self.assertEqual(json.loads((installed / "install-state.json").read_text())["subnet"], "172.30.23.0/28")
         self.assertIn(str(installed), output.getvalue())
         self.assertIn(b"--package-directory", (installed / "scripts/install_host.py").read_bytes())
         self.assertEqual(caddyfile.read_bytes(), original)

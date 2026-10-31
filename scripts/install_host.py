@@ -180,7 +180,7 @@ def select_subnet(occupied):
 def available_subnet():
     ids = run("docker", "network", "ls", "--quiet").splitlines()
     existing = json.loads(run("docker", "network", "inspect", *ids)) if ids else []
-    occupied = [c["Subnet"] for n in existing for c in n.get("IPAM", {}).get("Config", []) if c.get("Subnet")]
+    occupied = [c["Subnet"] for n in existing for c in ((n.get("IPAM") or {}).get("Config") or []) if c.get("Subnet")]
     for route in json.loads(run("ip", "-json", "route", "show", "table", "all")):
         dst = route.get("dst", "default")
         if dst not in ("default", "0.0.0.0/0"):

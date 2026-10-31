@@ -2,7 +2,25 @@
 
 The deliverable is one Go app image, with SQLite on a persistent Docker volume. The frontend is embedded. Compose also provides bounded logs, CPU and memory, a read-only root filesystem, non-root execution and health checks.
 
-## One-time preparation
+## First installation: existing host Caddy, direct HTTPS
+
+This profile preserves existing DNS hosting and proxies the garden directly through host Caddy. Turnstile works independently of Cloudflare DNS/CDN. The application still requires real Turnstile keys and retains its signed sessions, origin checks, IP/session/global limits and resource caps. This profile does **not** provide an edge WAF or protect the VPS bandwidth from DDoS.
+
+`scripts/install_host.py` supports Linux amd64, an active `caddy.service` using a Caddyfile and its default loopback admin API, Docker Engine/Compose, Python 3, Bash, curl, iproute2 and flock. The deployment preview workflow builds the image on GitHub after all checks pass. A push to `feat/shared-garden` only publishes a preview when its commit message explicitly contains `[deploy-preview]`; it is a prerelease tied to that source commit, not a stable release. The published files include SHA-256 checksums. No GitHub password or registry credential belongs on the VPS.
+
+Download the installer from the exact source commit, verify its supplied SHA-256, and run it with `sudo python3`, `--commit FULL_COMMIT_SHA` and `--domain YOUR_GARDEN_HOSTNAME`. The release `v0.1.0-preview.FIRST_12_COMMIT_CHARACTERS` must already exist. `--directory` defaults to `/srv/little-garden` and must not contain an unrelated project.
+
+Use `--prepare-only` to download and verify the image and runtime files without starting any service or changing Caddy. This leaves a local copy of the installer and prints the activation command. Then create a Turnstile **Managed** widget restricted to the exact garden hostname, with pre-clearance off. Activation asks for Site key and Secret key in the terminal; the latter is hidden. They are written only to the server's mode-0600 `deploy/.env`, alongside a server-generated session secret. Neither key is passed in command arguments or committed to git. Empty values and Turnstile testing keys are rejected.
+
+The installer detects Caddy's active file from the running process, including files under `/srv`. It compares the adapted file to Caddy's current configuration before applying changes. Custom JSON/API-managed/`--resume` configurations, custom admin listeners and unresolved environment-dependent configs require manual integration; the installer stops rather than guessing. It checks Docker networks and host routes before reserving a dedicated subnet, publishes only `127.0.0.1:18080`, and sets 100 WebSocket slots for the small-VPS profile. An unrelated existing garden container/volume/domain is not taken over.
+
+For public direct ingress the managed block sets `X-Real-IP` from Caddy's **actual remote socket peer**, never from a client-provided Cloudflare/X-Forwarded-For header. Do not place a CDN in front of this profile without deliberately updating the trusted-proxy configuration; otherwise users behind that CDN share its IP limits. Do not use the tunnel-only example on a public listener.
+
+The app must pass its health check before Caddy changes. The full candidate Caddyfile is validated, a private backup is saved, and only then is the file atomically replaced and gracefully reloaded. A failed reload restores/reloads the previous configuration unless another operator has edited the file meanwhile. It never overwrites a detected concurrent edit. Existing containers, their volumes and other Caddy sites are retained. Re-running the exact installer/commit/domain resumes the first installation; changing these parameters stops. Use the regular deployment script for subsequent releases.
+
+Successful output requires a certificate-verified HTTPS `/readyz` response through local Caddy. Certificate issuance may need more time or DNS correction; if HTTPS cannot be verified the installer reports incomplete verification and preserves the service/data for diagnosis. Then verify real browser planting, Turnstile hostname/action, restart persistence, backup recovery and traffic budgets. Automated installer tests use simulated command failures for preservation/rollback boundaries; CI also validates the generated route with real Caddy and builds/boots the production app image. These are not a live VPS acceptance test.
+
+## One-time preparation: Cloudflare Tunnel profile
 
 1. Confirm the VPS region, Linux version, CPU architecture, available memory and disk, and whether Caddy runs on the host or in Docker. Install Docker Engine and Compose v2 from the vendor's instructions if needed. The deploy script also uses Bash and `flock` (util-linux).
 2. Clone this repository into a suitable server directory such as `/opt/little-garden`. Do not replace an existing Caddy deployment or other applications.
@@ -107,4 +125,4 @@ Never run `docker compose down -v` as an update or rollback step: it removes the
 - Cloudflare account access for named Tunnel, hostname, Turnstile and edge rules.
 - Server-side secret files and a verified backup destination/retention policy.
 
-No deployment has occurred merely by creating or merging this repository. Live domain verification, direct-origin checks, VPS load tests and browser checks are separate acceptance steps.
+No deployment has occurred merely by creating or merging this repository or publishing its image. For direct mode, verify that only Caddy exposes the app and document the absence of edge protection. For tunnel mode, also verify there is no alternate public route to the garden API. Live domain verification, VPS load tests and browser checks are separate acceptance steps.

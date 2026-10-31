@@ -4,6 +4,8 @@ HTTPS/WSS protects the transport. JSON is the protocol. A browser-side shared se
 
 ## Edge and origin boundary
 
+Two ingress profiles are supported. **Direct host Caddy**, configured by `scripts/install_host.py`, keeps the existing DNS provider and uses Caddy's actual socket peer (`{http.request.remote.host}`) for `X-Real-IP`. It retains all application abuse controls, but has no Cloudflare WAF or edge bandwidth protection. It must not trust a publicly supplied `CF-Connecting-IP` header. If a CDN is introduced later, its trusted-proxy policy must be configured explicitly instead of reusing the direct profile unchanged.
+
 The recommended ingress is a **named Cloudflare Tunnel → dedicated private Caddy listener → Go**. The app is only published on host loopback; the tunnel listener must not be published to the internet. Do not add a second public Caddy route to the same garden API. Keep other existing sites' configuration intact.
 
 Enable WAF and route-specific rate rules within the Cloudflare account's actual plan. Apply stricter protection to session creation and planting, and keep viewing lightweight. Cloudflare only inspects the initial WebSocket upgrade, so Go owns connection budgets, message-size limits and slow-client handling after upgrade.
@@ -67,7 +69,7 @@ Hiding is reversible. `ban-flower` bans that anonymous session and hides its flo
 
 ## Before the first public launch
 
-Verify the live domain's Siteverify hostname/action, actual trusted-proxy IP handling, no direct public origin route, container restart/persistence, backup restoration, and traffic budgets under load on the real VPS. Check the existing Caddy routes and Alibaba security group without disturbing unrelated services. Configure edge rules and bandwidth/disk alerts in the user's accounts.
+Verify the live domain's Siteverify hostname/action, actual trusted-proxy IP handling, container restart/persistence, backup restoration, and traffic budgets under load on the real VPS. In direct mode, only Caddy should expose the app. In tunnel mode, verify there is no alternate public origin route. Check the existing Caddy routes and Alibaba security group without disturbing unrelated services. Configure applicable edge rules and bandwidth/disk alerts in the user's accounts.
 
 No Worker is required for v1. A Worker can later add an edge policy if measured traffic justifies it; the Go coordinator remains authoritative for garden mutations and global write limits.
 

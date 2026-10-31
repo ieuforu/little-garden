@@ -4,7 +4,7 @@
 
 A shared garden for small, good things. Pick a color, find an empty spot, and leave a flower for the next person.
 
-React + TypeScript / Canvas 2D / Go / SQLite. Frontend assets are embedded into a single Go executable. Production runs in Docker, behind your existing Caddy and a named Cloudflare Tunnel.
+React + TypeScript / Canvas 2D / Go / SQLite. Frontend assets are embedded into a single Go executable. Production runs in Docker behind your existing Caddy. Use either direct HTTPS with application abuse controls, or a named Cloudflare Tunnel with additional edge protection.
 
 ## What works
 
@@ -49,7 +49,11 @@ pnpm build
 
 ## Deploy
 
-[Deployment guide](docs/deployment.md) covers the one-time domain / Turnstile / Tunnel / Caddy setup, both host and container Caddy, offline image transfer, backups and recovery.
+[Deployment guide](docs/deployment.md) covers both direct host Caddy and Cloudflare Tunnel, offline image transfer, backups and recovery.
+
+For a small Linux amd64 VPS with Caddy already managed by systemd, `scripts/install_host.py` downloads a tested preview image from this repository's GitHub Releases. It avoids building Node/Go on the VPS and does not need a GitHub or registry login. `--prepare-only` downloads and verifies the packages first; activation prompts for real Turnstile keys directly in the terminal. Turnstile does not require moving your DNS to Cloudflare.
+
+The installer defaults to `/srv/little-garden`, detects the active Caddyfile instead of assuming its path, checks for existing domain/network/port conflicts, and appends only a managed site block. It backs up and validates the configuration before reloading, restoring the prior file if that reload fails. It refuses an unrelated existing install directory or a mismatch between Caddy's live and on-disk configuration. It does not restart Caddy or existing containers. Direct mode has no Cloudflare edge WAF or network DDoS protection; the app's production Turnstile, session, rate and connection limits remain enabled.
 
 After that setup and after publishing a matching release tag:
 
@@ -66,7 +70,7 @@ docker build -f deploy/Dockerfile -t ghcr.io/ieuforu/little-garden:v0.1.0 .
 ./scripts/deploy.sh --local v0.1.0
 ```
 
-No script automatically installs system software, changes DNS or firewall rules, modifies an existing Caddyfile, or restores an older database. Those depend on the actual server and are configured once.
+The first-install helper above can add its managed Caddy site. The regular deploy/backup scripts do not change Caddy. No script installs system software, changes DNS/firewall rules, deletes data volumes, or automatically restores an older database.
 
 ## Project map
 

@@ -18,3 +18,5 @@ backups/
 coverage/
 bin/
 *.log
+__pycache__/
+*.pyc

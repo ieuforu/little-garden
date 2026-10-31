@@ -1,0 +1,14 @@
+# Add this block to your existing host Caddyfile.
+# A named Cloudflare Tunnel must target http://127.0.0.1:18180.
+# Do NOT also proxy this API from a public :80/:443 listener.
+http://:18180 {
+    bind 127.0.0.1
+    encode zstd gzip
+    request_body {
+        max_size 8KB
+    }
+    reverse_proxy 127.0.0.1:18080 {
+        # This listener is reachable only by local cloudflared.
+        header_up X-Real-IP {http.request.header.CF-Connecting-IP}
+    }
+}

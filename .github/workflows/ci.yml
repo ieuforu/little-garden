@@ -1,0 +1,64 @@
+name: Checks
+on:
+  push:
+    branches: [main, 'feat/**', 'fix/**']
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.10'
+          cache-dependency-path: server/go.sum
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:web
+      - run: pnpm test:deploy
+      - run: pnpm build:web
+      - name: Go race tests and vet
+        working-directory: server
+        run: |
+          go test -race ./...
+          go vet ./...
+          CGO_ENABLED=0 go build -trimpath -o ../bin/garden ./cmd/garden
+      - name: Check shell scripts
+        run: |
+          bash -n scripts/deploy.sh scripts/backup.sh
+          shellcheck scripts/deploy.sh scripts/backup.sh
+      - name: Build the deployment image
+        run: docker build -f deploy/Dockerfile -t little-garden:test .
+      - name: Smoke test the real production image
+        run: |
+          docker run -d --name garden-smoke --read-only --cap-drop ALL \
+            --tmpfs /tmp:rw,size=16m \
+            -p 127.0.0.1:18080:8080 \
+            -e PUBLIC_ORIGIN=https://garden.example \
+            -e SESSION_SECRET=0000000000000000000000000000000000000000000000000000000000000001 \
+            -e TURNSTILE_SITE_KEY=ci-unused \
+            -e TURNSTILE_SECRET_KEY=ci-unused \
+            -v smoke-data:/data -v smoke-backups:/backups little-garden:test
+          trap 'docker logs garden-smoke; docker rm -f garden-smoke' EXIT
+          for attempt in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:18080/readyz; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/readyz
+          curl -fsS http://127.0.0.1:18080/ | grep -q 'Little Garden'
+          test "$(docker exec garden-smoke /app/garden db-version)" = 1
+          docker exec garden-smoke /app/garden backup --output /backups/smoke.db
+          docker exec garden-smoke /app/garden admin pause
+          docker exec garden-smoke /app/garden admin resume

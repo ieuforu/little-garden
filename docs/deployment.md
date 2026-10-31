@@ -20,6 +20,29 @@ The app must pass its health check before Caddy changes. The full candidate Cadd
 
 Successful output requires a certificate-verified HTTPS `/readyz` response through local Caddy. Certificate issuance may need more time or DNS correction; if HTTPS cannot be verified the installer reports incomplete verification and preserves the service/data for diagnosis. Then verify real browser planting, Turnstile hostname/action, restart persistence, backup recovery and traffic budgets. Automated installer tests use simulated command failures for preservation/rollback boundaries; CI also validates the generated route with real Caddy and builds/boots the production app image. These are not a live VPS acceptance test.
 
+### GitHub is unreachable during first installation
+
+Build an executable ZIP on a machine that can download the **three assets from one tested preview release**: `SHA256SUMS`, `host-files.tar.gz` and `little-garden-linux-amd64.tar.gz`. Use a reviewed checkout of the packaging scripts; transport fixes may be newer than the application image. `--commit` must identify the application release, not the packaging checkout.
+
+```bash
+python3 scripts/build_offline.py --assets /path/to/release-assets \
+  --commit FULL_APPLICATION_COMMIT_SHA --output /path/to/little-garden-offline.zip
+python3 /path/to/little-garden-offline.zip --verify-only
+```
+
+The builder verifies the release checksums and prints the ZIP's SHA-256. Transfer that ZIP through Workbench's file upload into the login user's home directory, or through SSH. Verify its SHA-256 against the separately supplied value before execution. For the `admin` user:
+
+```bash
+sha256sum /home/admin/little-garden-offline.zip
+sudo python3 /home/admin/little-garden-offline.zip --domain YOUR_GARDEN_HOSTNAME
+```
+
+No unzip utility is needed. The ZIP checks its file list, types, sizes and embedded SHA-256 values before importing the installer. `--verify-only` requires no root access or Docker and does not run the installer. Append `--prepare-only` to stage the files first, before entering real Turnstile keys. Existing Caddy and other workloads retain the same preservation checks as the online installer.
+
+Offline installation does not access GitHub, a Docker registry, npm or Go package servers. It loads the bundled image with Docker and records a private cache so the printed activation command and retries stay offline. Missing/corrupt files fail immediately; there is no network fallback. A current bootstrap is kept even when the release contains an older installer. Existing local release assets can also be supplied directly with `install_host.py --package-directory /path/to/release-assets` and the normal domain/commit arguments.
+
+This removes application downloads, not all Internet access: Caddy still needs certificate issuance connectivity and the app needs Turnstile server verification. Inner checksums detect corruption; trust in the installer comes from the reviewed source and separately verified outer ZIP hash. Secrets are never included in the bundle.
+
 ## One-time preparation: Cloudflare Tunnel profile
 
 1. Confirm the VPS region, Linux version, CPU architecture, available memory and disk, and whether Caddy runs on the host or in Docker. Install Docker Engine and Compose v2 from the vendor's instructions if needed. The deploy script also uses Bash and `flock` (util-linux).

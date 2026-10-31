@@ -53,6 +53,8 @@ pnpm build
 
 For a small Linux amd64 VPS with Caddy already managed by systemd, `scripts/install_host.py` downloads a tested preview image from this repository's GitHub Releases. It avoids building Node/Go on the VPS and does not need a GitHub or registry login. `--prepare-only` downloads and verifies the packages first; activation prompts for real Turnstile keys directly in the terminal. Turnstile does not require moving your DNS to Cloudflare.
 
+If GitHub is unreachable from the VPS, use the [single-file offline installer](docs/deployment.md#github-is-unreachable-during-first-installation). Upload its ZIP through Workbench, then run it directly with Python; it includes the built image and retains offline support on retries. The VPS does not need a proxy to download the app.
+
 The installer defaults to `/srv/little-garden`, detects the active Caddyfile instead of assuming its path, checks for existing domain/network/port conflicts, and appends only a managed site block. It backs up and validates the configuration before reloading, restoring the prior file if that reload fails. It refuses an unrelated existing install directory or a mismatch between Caddy's live and on-disk configuration. It does not restart Caddy or existing containers. Direct mode has no Cloudflare edge WAF or network DDoS protection; the app's production Turnstile, session, rate and connection limits remain enabled.
 
 After that setup and after publishing a matching release tag:

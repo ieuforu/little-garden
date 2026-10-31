@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """First installation on an amd64 Linux host with an existing systemd Caddy.
 
-Run as root, with an exact source commit. --prepare-only downloads verified
-release files without starting the app or changing Caddy. No third-party Python
+Run as root, with an exact application commit. --package-directory uses local
+release files with no download fallback. --prepare-only verifies the release
+without starting the app or changing Caddy. No third-party Python
 packages, server-side compilation, DNS edits or Docker registry login required.
 """
 
@@ -30,6 +31,7 @@ import time
 import urllib.request
 
 REPO = "ieuforu/little-garden"
+ASSET_NAMES = ("host-files.tar.gz", "little-garden-linux-amd64.tar.gz")
 RUNTIME_FILES = {
     "deploy/compose.yaml", "scripts/deploy.sh", "scripts/backup.sh",
     "scripts/install_host.py",
@@ -121,6 +123,49 @@ def extract_runtime(archive, target):
                     "安装目录中存在符号链接；已停止。")
             with bundle.extractfile(member) as stream:
                 atomic_write(output, stream.read(), 0o755 if member.name.endswith(".sh") else 0o644)
+
+
+def read_checksums(path):
+    require(path.is_file() and not path.is_symlink() and path.stat().st_size <= 16 * 1024,
+            "缺少有效的 SHA256SUMS 文件。")
+    checksums = {}
+    for line in path.read_text().splitlines():
+        parts = line.split()
+        require(len(parts) == 2 and re.fullmatch(r"[a-f0-9]{64}", parts[0]), "校验文件格式无效。")
+        name = parts[1].lstrip("*")
+        require(name in ASSET_NAMES and name not in checksums, "校验文件包含未知或重复文件。")
+        checksums[name] = parts[0]
+    require(set(checksums) == set(ASSET_NAMES), "校验文件缺少必要的安装包。")
+    return checksums
+
+
+def stage_assets(cache, version, package_directory=None):
+    if package_directory is None:
+        base = f"https://github.com/{REPO}/releases/download/{version}"
+        download(base + "/SHA256SUMS", cache / "SHA256SUMS", max_bytes=16 * 1024)
+        checksums = read_checksums(cache / "SHA256SUMS")
+        for name in ASSET_NAMES:
+            download(base + "/" + name, cache / name, checksums[name])
+        return
+    source = Path(package_directory)
+    checksums = read_checksums(source / "SHA256SUMS")
+    # Validate every local payload before writing anything. Missing or damaged
+    # offline files must fail immediately, never fall back to GitHub.
+    for name in ASSET_NAMES:
+        path = source / name
+        require(path.is_file() and not path.is_symlink() and path.stat().st_size <= 256 * 1024 * 1024,
+                f"离线包文件缺失或格式无效：{name}。")
+        require(digest(path) == checksums[name], f"离线包 SHA-256 不匹配：{name}。")
+    if source.resolve() != cache.resolve():
+        for name in (*ASSET_NAMES, "SHA256SUMS"):
+            atomic_write(cache / name, (source / name).read_bytes())
+
+
+def install_runtime(archive, root, bootstrap):
+    extract_runtime(archive, root)
+    # Transport fixes can be newer than the pinned application image. Keep the
+    # verified bootstrap so a later retry retains offline support.
+    atomic_write(root / "scripts/install_host.py", bootstrap, 0o644)
 
 
 def select_subnet(occupied):
@@ -265,13 +310,15 @@ def write_env(path, domain, subnet, site_key, secret_key):
     atomic_write(path, content.encode())
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--domain", required=True)
     parser.add_argument("--commit", required=True)
     parser.add_argument("--directory", default="/srv/little-garden")
     parser.add_argument("--prepare-only", action="store_true")
-    args = parser.parse_args()
+    parser.add_argument("--package-directory", type=Path)
+    args = parser.parse_args(argv)
+    bootstrap = Path(__file__).read_bytes()
     domain = domain_name(args.domain)
     require(re.fullmatch(r"[a-f0-9]{40}", args.commit), "必须提供完整的 40 位源码 commit。")
     require(os.geteuid() == 0, "请通过 sudo python3 运行此安装器。")
@@ -309,25 +356,19 @@ def main():
     version = f"v0.1.0-preview.{args.commit[:12]}"
     cache = root / ".cache"
     cache.mkdir(mode=0o700, exist_ok=True)
-    print(f"Caddyfile：{caddyfile}\n安装目录：{root}\n下载已构建的镜像，无需在服务器编译。", flush=True)
-    base = f"https://github.com/{REPO}/releases/download/{version}"
-    sums = cache / "SHA256SUMS"
-    download(base + "/SHA256SUMS", sums, max_bytes=16 * 1024)
-    checksums = {}
-    for line in sums.read_text().splitlines():
-        parts = line.split()
-        require(len(parts) == 2 and re.fullmatch(r"[a-f0-9]{64}", parts[0]), "校验文件格式无效。")
-        checksums[parts[1].lstrip("*")] = parts[0]
-    names = ("host-files.tar.gz", "little-garden-linux-amd64.tar.gz")
-    for name in names:
-        require(name in checksums, "校验文件缺少必要的安装包。")
-        download(base + "/" + name, cache / name, checksums[name])
-    extract_runtime(cache / names[0], root)
+    local_package = args.package_directory or (cache if state.get("offline") else None)
+    print(f"Caddyfile：{caddyfile}\n安装目录：{root}", flush=True)
+    print("使用离线镜像，不访问 GitHub 或镜像仓库。" if local_package else
+          "下载已构建的镜像，无需在服务器编译。", flush=True)
+    stage_assets(cache, version, local_package)
+    install_runtime(cache / ASSET_NAMES[0], root, bootstrap)
     state["version"] = version
+    state["offline"] = local_package is not None
     atomic_write(state_path, (json.dumps(state, indent=2) + "\n").encode())
     if args.prepare_only:
         print("准备完成：安装包 SHA-256 已验证。尚未启动服务，也未修改 Caddy。")
-        activation = shlex.join(["sudo", "python3", str(root / "scripts/install_host.py"), "--domain", domain, "--commit", args.commit])
+        activation = shlex.join(["sudo", "python3", str(root / "scripts/install_host.py"), "--domain", domain,
+                                 "--commit", args.commit, "--directory", str(root)])
         print(f"准备好 Turnstile 密钥后执行：\n{activation}")
         return
     envfile = root / "deploy/.env"
@@ -349,7 +390,7 @@ def main():
                 "现有应用配置与安装记录不一致，已停止。")
         os.chmod(envfile, 0o600)
     print("加载镜像并启动花园……", flush=True)
-    run("docker", "load", "--input", str(cache / names[1]), timeout=180)
+    run("docker", "load", "--input", str(cache / ASSET_NAMES[1]), timeout=180)
     image = f"ghcr.io/{REPO}:{version}"
     info = json.loads(run("docker", "image", "inspect", image))[0]
     require(info.get("Os") == "linux" and info.get("Architecture") == "amd64" and

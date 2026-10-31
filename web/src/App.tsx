@@ -180,12 +180,11 @@ export default function App() {
     busy.current = true;
     setPending(req);
     try {
-      const result = await plant(req);
-      if (!result.duplicate) {
-        setMine((value) => value + 1);
-        setNotice("种下了。谢谢你，让这里多了一点颜色。");
-        if (sound) chime();
-      }
+      await plant(req);
+      // A confirmed network retry is still one successful action in this visit.
+      setMine((value) => value + 1);
+      setNotice("种下了。谢谢你，让这里多了一点颜色。");
+      if (sound) chime();
     } catch (error) {
       explain(error);
     } finally {
@@ -488,7 +487,7 @@ export default function App() {
           </span>
           <p>
             {mine > 0
-              ? `今天，你为这里种下了 ${mine} 朵花。`
+              ? `这次停留，你种下了 ${mine} 朵花。`
               : "不必做一件很大的事。"}
             <span>
               {mine > 0

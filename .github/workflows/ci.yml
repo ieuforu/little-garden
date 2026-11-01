@@ -1,0 +1,134 @@
+name: Checks
+on:
+  push:
+    branches: [main, 'feat/**', 'fix/**']
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.10'
+          cache-dependency-path: server/go.sum
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:web
+      - run: pnpm test:deploy
+      - name: Check the first-install safety boundaries
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - run: pnpm build:web
+      - name: Go race tests and vet
+        working-directory: server
+        run: |
+          go test -race ./...
+          go vet ./...
+          CGO_ENABLED=0 go build -trimpath -o ../bin/garden ./cmd/garden
+      - name: Check shell scripts
+        run: |
+          bash -n scripts/deploy.sh scripts/backup.sh
+          shellcheck scripts/deploy.sh scripts/backup.sh
+      - name: Build the deployment image
+        run: docker build -f deploy/Dockerfile -t little-garden:test .
+      - name: Smoke test the real production image
+        run: |
+          docker run -d --name garden-smoke --read-only --cap-drop ALL \
+            --tmpfs /tmp:rw,size=16m \
+            -p 127.0.0.1:18080:8080 \
+            -e PUBLIC_ORIGIN=https://garden.example \
+            -e SESSION_SECRET=0000000000000000000000000000000000000000000000000000000000000001 \
+            -e TURNSTILE_SITE_KEY=ci-unused \
+            -e TURNSTILE_SECRET_KEY=ci-unused \
+            -v smoke-data:/data -v smoke-backups:/backups little-garden:test
+          trap 'docker logs garden-smoke; docker rm -f garden-smoke' EXIT
+          for attempt in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:18080/readyz; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/readyz
+          curl -fsS http://127.0.0.1:18080/ | grep -q 'Little Garden'
+          test "$(docker exec garden-smoke /app/garden db-version)" = 1
+          docker exec garden-smoke /app/garden backup --output /backups/smoke.db
+          docker exec garden-smoke /app/garden admin pause
+          docker exec garden-smoke /app/garden admin resume
+      - name: Validate direct-host Caddy configuration
+        run: |
+          mkdir -p .local/caddy-check
+          python3 - <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, 'scripts')
+          from install_host import site_block
+          Path('.local/caddy-check/Caddyfile').write_text(site_block('garden.example.com'))
+          PY
+          docker run --rm --network none -v "$PWD/.local/caddy-check:/config:ro" caddy:2.11.4 \
+            caddy adapt --validate --config /config/Caddyfile --adapter caddyfile > .local/caddy-check/adapted.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          config = json.loads(Path('.local/caddy-check/adapted.json').read_text())
+          def check(value):
+              if isinstance(value, dict):
+                  if value.get('handler') == 'reverse_proxy':
+                      headers = {key.lower(): item for key, item in value['headers']['request']['set'].items()}
+                      assert headers['x-real-ip'] == ['{http.request.remote.host}']
+                      return True
+                  return any(check(child) for child in value.values())
+              return isinstance(value, list) and any(check(child) for child in value)
+          assert check(config)
+          PY
+  preview-package:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feat/shared-garden' && contains(github.event.head_commit.message, '[deploy-preview]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the tested source as an amd64 deployment package
+        run: |
+          version="v0.1.0-preview.${GITHUB_SHA:0:12}"
+          image="ghcr.io/${GITHUB_REPOSITORY}:${version}"
+          mkdir -p dist/preview
+          docker build --platform linux/amd64 -f deploy/Dockerfile \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t "$image" .
+          docker run -d --name preview-smoke --read-only --cap-drop ALL --tmpfs /tmp:rw,size=16m \
+            -p 127.0.0.1:18080:8080 -e PUBLIC_ORIGIN=https://garden.example \
+            -e SESSION_SECRET=0000000000000000000000000000000000000000000000000000000000000001 \
+            -e TURNSTILE_SITE_KEY=ci-unused -e TURNSTILE_SECRET_KEY=ci-unused \
+            -v preview-data:/data -v preview-backups:/backups "$image"
+          trap 'docker logs preview-smoke; docker rm -f preview-smoke' EXIT
+          for attempt in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:18080/readyz; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/readyz
+          curl -fsS http://127.0.0.1:18080/ | grep -q 'Little Garden'
+          docker save "$image" | gzip -1 > dist/preview/little-garden-linux-amd64.tar.gz
+          tar -czf dist/preview/host-files.tar.gz \
+            deploy/compose.yaml scripts/deploy.sh scripts/backup.sh scripts/install_host.py
+          cd dist/preview
+          sha256sum host-files.tar.gz little-garden-linux-amd64.tar.gz > SHA256SUMS
+      - name: Publish an explicitly requested preview release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="v0.1.0-preview.${GITHUB_SHA:0:12}"
+          gh release create "$version" dist/preview/* --target "$GITHUB_SHA" \
+            --prerelease --latest=false --title "Little Garden deployment preview ${GITHUB_SHA:0:12}" \
+            --notes 'CI-tested Linux amd64 image and first-install files. Requires real Turnstile keys and an existing host Caddy service. Live VPS and browser acceptance are still required.'

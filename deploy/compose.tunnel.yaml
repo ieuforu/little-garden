@@ -1,0 +1,24 @@
+# Optional: only for an existing Docker Caddy on little-garden-ingress.
+# Configure the named tunnel's public hostname to route to http://caddy:18180.
+# Store the token in /opt/little-garden-secrets/tunnel-token (0600).
+services:
+  cloudflared:
+    image: ${CLOUDFLARED_IMAGE:?Set a pinned cloudflared version or digest}
+    user: "65532:65532"
+    command: tunnel --no-autoupdate run --token-file /run/secrets/tunnel_token
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    pids_limit: 64
+    secrets: [tunnel_token]
+    networks: [ingress]
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+secrets:
+  tunnel_token:
+    file: /opt/little-garden-secrets/tunnel-token

@@ -1,0 +1,14 @@
+.git
+**/node_modules
+**/dist
+.env*
+deploy/.env
+.local
+.openai
+.sites-runtime
+data
+backups
+bin
+**/*.db*
+**/*.log
+docs/previews

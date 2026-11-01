@@ -1,0 +1,44 @@
+name: little-garden
+services:
+  garden:
+    image: ${GARDEN_IMAGE:?Run scripts/deploy.sh with a release version}
+    pull_policy: never
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      GARDEN_MODE: production
+      LISTEN_ADDR: :8080
+      DATABASE_PATH: /data/garden.db
+      ADMIN_SOCKET: /data/admin.sock
+      GOMEMLIMIT: 192MiB
+    ports:
+      - "127.0.0.1:${GARDEN_PORT:-18080}:8080"
+    volumes:
+      - garden-data:/data
+      - garden-backups:/backups
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 1.0
+    pids_limit: 96
+    stop_grace_period: 12s
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "3"
+    networks:
+      - ingress
+networks:
+  ingress:
+    name: little-garden-ingress
+    ipam:
+      config:
+        - subnet: ${GARDEN_SUBNET:-172.30.21.0/28}
+volumes:
+  garden-data:
+  garden-backups:

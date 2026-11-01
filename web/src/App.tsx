@@ -70,15 +70,15 @@ function ShuffleIcon() {
 }
 
 const messages: Record<string, string> = {
-  too_close: "这里已经有一朵花啦，给它留一点生长的空间。",
-  garden_full: "这座花园已经盛开了。先一起欣赏，等下一块新花田。",
-  garden_paused: "花园正在休息，暂时不能种新花。",
-  garden_changed: "园丁开了一块新花田，刷新后再种吧。",
-  session_required: "种花凭证过期了，再验证一次就好。",
-  session_blocked: "这个种花会话已停用，仍然可以看花。",
-  network_error: "网络有点慢，还没确认是否种下。重新连接后会核对。",
-  verification_failed: "验证没通过，请关闭后再试一次。",
-  invalid_flower: "换一个花田里的位置试试。",
+  too_close: "这里离其他花太近，换一块空地试试。",
+  garden_full: "这块花田已经种满，暂时不能再种。",
+  garden_paused: "花园暂时停止种花，仍然可以浏览。",
+  garden_changed: "花田已更新，请刷新后再种。",
+  session_required: "验证已过期，请重新验证。",
+  session_blocked: "当前会话已暂停种花，仍然可以浏览。",
+  network_error: "连接中断，重新连接后会确认这朵花是否已保存。",
+  verification_failed: "验证未通过，请再试一次。",
+  invalid_flower: "请在花田范围内选择空地。",
 };
 
 export default function App() {
@@ -170,8 +170,8 @@ export default function App() {
         cooldown.current = Date.now() + error.retryAfter * 1000;
       setNotice(
         error.code === "rate_limited"
-          ? `慢一点，再等 ${error.retryAfter || 3} 秒。花园有的是时间。`
-          : (messages[error.code] ?? "花园暂时有点忙，稍后再试。"),
+          ? `请等 ${error.retryAfter || 3} 秒后再种。`
+          : (messages[error.code] ?? "暂时无法种花，请稍后重试。"),
       );
     } else setNotice("连接暂时中断，稍后再试。");
   }
@@ -183,7 +183,7 @@ export default function App() {
       await plant(req);
       // A confirmed network retry is still one successful action in this visit.
       setMine((value) => value + 1);
-      setNotice("种下了。谢谢你，让这里多了一点颜色。");
+      setNotice("种下了，花朵已保存。");
       if (sound) chime();
     } catch (error) {
       explain(error);
@@ -202,11 +202,11 @@ export default function App() {
     )
       return;
     if (connection !== "connected") {
-      setNotice("正在重新连接花园，连上后就可以继续种花。");
+      setNotice("正在重新连接，请连接成功后再种。");
       return;
     }
     if (Date.now() < cooldown.current) {
-      setNotice("让花园喘口气，稍等几秒再种吧。");
+      setNotice("请稍等几秒后再种。");
       return;
     }
     if (
@@ -219,7 +219,7 @@ export default function App() {
       return;
     }
     if (!canPlant(point, snapshot.flowers, snapshot.garden)) {
-      setNotice("换一块空地吧，花朵需要一点生长的空间。");
+      setNotice("这里离其他花太近，换一块空地试试。");
       return;
     }
     const req = {
@@ -259,7 +259,7 @@ export default function App() {
   function chooseSpot() {
     const point = renderer.current?.randomSpot();
     if (point) action.current(point);
-    else setNotice("这块花田有点满，拖动画面找一块空地吧。");
+    else setNotice("当前画面没有找到空地，可以拖动或缩小花田再试。");
   }
   function closeDialog() {
     setDialog(null);
@@ -272,13 +272,11 @@ export default function App() {
     <div className="site-shell">
       <header className="site-header">
         <a href="/" className="wordmark" aria-label="Little Garden 首页">
-          <Bloom size={31} />
-          <span>
-            little garden<span className="wordmark-dot">.</span>
-          </span>
+          <Bloom color="#be6d4b" size={25} />
+          <span>little garden</span>
         </a>
         <nav aria-label="主导航">
-          <button onClick={() => setDialog("about")}>关于花园</button>
+          <button onClick={() => setDialog("about")}>怎么玩</button>
           <a
             href="https://github.com/ieuforu/little-garden"
             target="_blank"
@@ -292,95 +290,34 @@ export default function App() {
       <main>
         <section className="intro" aria-labelledby="page-title">
           <div>
-            <div className="eyebrow">
-              <span className="tiny-sun" aria-hidden="true">
-                ✳
-              </span>{" "}
-              AN OPEN GARDEN, FOR EVERYONE
-            </div>
-            <h1 id="page-title">
-              小小一朵，
-              <br />
-              <span>也是一个好开始。</span>
-            </h1>
+            <h1 id="page-title">一起种花</h1>
+            <p>选个颜色，点一下空地。</p>
           </div>
-          <div className="intro-note">
-            <span className="note-line" aria-hidden="true"></span>
-            <p>
-              找一块空地，种下一点颜色。
-              <br />
-              你和路过的人，会让这里慢慢开满花。
-            </p>
-            <span className="handwritten">good things take a little time.</span>
+          <div
+            className={`connection ${connected ? "is-connected" : ""}`}
+            role="status"
+          >
+            <span aria-hidden="true" />
+            {connected
+              ? "实时同步中"
+              : connection === "offline"
+                ? "暂时离线"
+                : "正在连接…"}
           </div>
         </section>
 
         <section className="garden-section" aria-label="共享花园">
           <div className="garden-topline">
-            <div>
+            <div className="garden-meta">
               <span className="garden-index">
-                GARDEN No. {String(snapshot?.garden.id ?? 1).padStart(3, "0")}
+                花田 <span>{String(snapshot?.garden.id ?? 1).padStart(3, "0")}</span>
               </span>
-              <span className="garden-name">此刻，正在生长</span>
+              <span className="meta-divider" aria-hidden="true">/</span>
+              <span className="flower-count">
+                <strong>{snapshot ? count : "—"}</strong> 朵花
+              </span>
             </div>
-            <div
-              className={`connection ${connected ? "is-connected" : ""}`}
-              role="status"
-            >
-              <span />
-              {connected
-                ? "与花园相连"
-                : connection === "offline"
-                  ? "暂时离线"
-                  : "正在连接花园"}
-            </div>
-          </div>
-          <div className="garden-stage">
-            <div className="garden-corner" aria-hidden="true">
-              <span>留一点空白</span>
-              <span>给偶然发生的美好</span>
-            </div>
-            <div className="flower-count">
-              <strong>{snapshot ? String(count).padStart(2, "0") : "—"}</strong>
-              <span>朵花在这里</span>
-            </div>
-            <canvas
-              ref={canvas}
-              className="garden-canvas"
-              tabIndex={0}
-              role="application"
-              aria-label={`共享花园，${count} 朵花。点击空地种花，拖动平移；键盘方向键移动位置，回车种花。也可使用下方帮我选个位置按钮。`}
-              aria-describedby="garden-help"
-            />
-            {(!snapshot || canvasError) && (
-              <div className="garden-loading" role="status">
-                <Bloom size={46} />
-                <p>
-                  {canvasError
-                    ? "这个浏览器暂时无法画出花园。"
-                    : loadError
-                      ? "花园暂时没连上，正在重试…"
-                      : "把花园慢慢铺开…"}
-                </p>
-              </div>
-            )}
-            {snapshot && count === 0 && (
-              <div className="empty-garden">
-                <p>一块新花田。</p>
-                <span>第一朵花，会是什么颜色？</span>
-              </div>
-            )}
-            {snapshot?.garden.paused && (
-              <div className="pause-label">花园正在休息 · 可以继续看花</div>
-            )}
             <div className="canvas-controls" aria-label="花园视角">
-              <button
-                aria-label="放大花园"
-                title="放大"
-                onClick={() => renderer.current?.zoom(1.25)}
-              >
-                +
-              </button>
               <button
                 aria-label="缩小花园"
                 title="缩小"
@@ -389,64 +326,57 @@ export default function App() {
                 −
               </button>
               <button
+                aria-label="放大花园"
+                title="放大"
+                onClick={() => renderer.current?.zoom(1.25)}
+              >
+                +
+              </button>
+              <button
                 className="fit-button"
                 aria-label="查看整座花园"
                 title="查看整座花园"
                 onClick={() => renderer.current?.fit()}
               >
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                  aria-hidden="true"
-                >
+                <svg width="17" height="17" viewBox="0 0 20 20" fill="none"
+                  stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
                   <path d="M7 3H3v4m10-4h4v4M3 13v4h4m6 0h4v-4" />
                 </svg>
               </button>
             </div>
-            <span className="field-note" aria-hidden="true">
-              a place to grow, together.
-            </span>
-            <div className="plant-toolbar">
-              <div
-                className="seed-picker"
-                role="group"
-                aria-label="选择花的颜色"
-              >
-                {palettes.map((p, i) => (
-                  <button
-                    key={p.name}
-                    className={i === palette ? "seed selected" : "seed"}
-                    aria-label={p.name}
-                    aria-pressed={i === palette}
-                    title={p.name}
-                    disabled={!!pending}
-                    onClick={() => setPalette(i)}
-                  >
-                    <Bloom color={p.color} size={30} />
-                  </button>
-                ))}
+          </div>
+
+          <div className="garden-stage">
+            <canvas
+              ref={canvas}
+              className="garden-canvas"
+              tabIndex={0}
+              role="application"
+              aria-label={`共享花园，${count} 朵花。点击空地种花，拖动平移；键盘方向键移动位置，回车种花。也可使用下方随机种一朵按钮。`}
+              aria-describedby="garden-help"
+            />
+            {(!snapshot || canvasError) && (
+              <div className="garden-loading" role="status">
+                <Bloom color="#be6d4b" size={32} />
+                <p>
+                  {canvasError
+                    ? "浏览器暂时无法显示花田。"
+                    : loadError
+                      ? "连接失败，正在重试…"
+                      : "正在加载花田…"}
+                </p>
               </div>
-              <span className="toolbar-divider" />
-              <button
-                className="plant-button"
-                disabled={
-                  !connected ||
-                  !!pending ||
-                  verifying ||
-                  !!snapshot?.garden.paused ||
-                  (!!snapshot &&
-                    snapshot.garden.planted >= snapshot.garden.capacity)
-                }
-                onClick={chooseSpot}
-              >
-                <ShuffleIcon />
-                <span>{pending ? "正在生长…" : "帮我选个位置"}</span>
-              </button>
-            </div>
+            )}
+            {snapshot && count === 0 && (
+              <div className="empty-garden">
+                <Bloom color={palettes[palette].color} size={32} />
+                <p>这里还没有花</p>
+                <span>点一块空地，种下第一朵。</span>
+              </div>
+            )}
+            {snapshot?.garden.paused && (
+              <div className="pause-label" role="status">暂时停止种花 · 仍可浏览</div>
+            )}
             <div
               className={`toast ${notice ? "visible" : ""}`}
               role="status"
@@ -455,105 +385,101 @@ export default function App() {
               {notice}
             </div>
           </div>
-          <div className="garden-caption">
-            <p id="garden-help">
-              <span aria-hidden="true">↖</span> 点击空地种花 · 拖动探索 ·
-              花会留在这里
-            </p>
+
+          <div className="plant-toolbar">
+            <div className="seed-picker" role="group" aria-label="选择花的颜色">
+              {palettes.map((p, i) => (
+                <button
+                  key={p.name}
+                  className={i === palette ? "seed selected" : "seed"}
+                  aria-label={p.name}
+                  aria-pressed={i === palette}
+                  disabled={!!pending || verifying}
+                  onClick={() => setPalette(i)}
+                >
+                  <Bloom color={p.color} size={28} />
+                  <span>{p.name}</span>
+                  <span className="seed-selected-mark" aria-hidden="true" />
+                </button>
+              ))}
+            </div>
             <button
-              className="sound-toggle"
-              aria-pressed={sound}
-              onClick={() => {
-                if (!sound) {
-                  try {
-                    audio.current ??= new AudioContext();
-                    void audio.current.resume();
-                    setSound(true);
-                  } catch {
-                    setNotice("这个浏览器暂时不能播放声音。");
-                  }
-                } else setSound(false);
-              }}
+              className="plant-button"
+              disabled={
+                !connected ||
+                canvasError ||
+                !!pending ||
+                verifying ||
+                !!snapshot?.garden.paused ||
+                (!!snapshot && snapshot.garden.planted >= snapshot.garden.capacity)
+              }
+              onClick={chooseSpot}
             >
-              <SoundIcon enabled={sound} />
-              <span>声音{sound ? "开" : "关"}</span>
+              <ShuffleIcon />
+              <span>{pending ? "正在种下…" : "随机种一朵"}</span>
             </button>
           </div>
         </section>
 
-        <section className="afterword" aria-label="花园寄语">
-          <span className="small-leaf" aria-hidden="true">
-            ❧
-          </span>
-          <p>
-            {mine > 0
-              ? `这次停留，你种下了 ${mine} 朵花。`
-              : "不必做一件很大的事。"}
-            <span>
-              {mine > 0
-                ? "小小的善意，也会慢慢长大。"
-                : "留下一朵花，就已经很好。"}
-            </span>
-          </p>
-        </section>
+        <div className="garden-caption">
+          <p id="garden-help">拖动查看花田<span> · 双指或按钮缩放</span></p>
+          <button
+            className="sound-toggle"
+            aria-pressed={sound}
+            onClick={() => {
+              if (!sound) {
+                try {
+                  audio.current ??= new AudioContext();
+                  void audio.current.resume();
+                  setSound(true);
+                } catch {
+                  setNotice("浏览器暂时无法播放声音。");
+                }
+              } else setSound(false);
+            }}
+          >
+            <SoundIcon enabled={sound} />
+            <span>声音{sound ? "开" : "关"}</span>
+          </button>
+        </div>
       </main>
 
       <footer className="site-footer">
-        <span>
-          A little experiment by{" "}
-          <a href="https://github.com/ieuforu" target="_blank" rel="noreferrer">
-            ieuforu
-          </a>
-        </span>
-        <span>
-          Made of tiny, good things{" "}
-          <span className="footer-star" aria-hidden="true">
-            ✳
-          </span>
-        </span>
+        <a href="https://github.com/ieuforu" target="_blank" rel="noreferrer">
+          by ieuforu <span aria-hidden="true">↗</span>
+        </a>
+        <span>本次种下 <strong>{mine}</strong> 朵</span>
       </footer>
 
       {dialog === "about" && (
-        <Dialog title="一起，种一点美好。" onClose={closeDialog}>
-          <p>
-            这里是一块所有人共享的小花田。选一个喜欢的颜色，点在空白处，一朵只属于这次相遇的花就会长出来。
-          </p>
-          <p>
-            花会保存下来，也会实时出现在其他人的画面里。花园最初的 16
-            朵由程序播下，之后的颜色，交给每一个路过的人。
-          </p>
-          <p>
-            拖动可以探索，双指或右下角按钮可以缩放。用键盘时，方向键移动，回车种花；也可以让我们帮你选个位置。
-          </p>
+        <Dialog title="关于这座花园" onClose={closeDialog}>
+          <p>这是一座共享花园。种下的花会保存，也会实时出现在其他人的画面里。</p>
+          <dl className="garden-instructions">
+            <div><dt>种花</dt><dd>选一个颜色，点花田里的空地。也可以按“随机种一朵”。</dd></div>
+            <div><dt>查看</dt><dd>拖动画面移动，双指或右上角按钮缩放。</dd></div>
+            <div><dt>键盘</dt><dd>聚焦花田后，用方向键选位置，回车种花。</dd></div>
+          </dl>
           <div className="about-footnote">
-            无需注册。首次种花有一次轻量验证；匿名种花凭证保留 24
-            小时。花田位置是画布坐标，不是你的地理位置。
+            无需注册，首次种花需要人机验证，有效期为 24 小时。
+            花园最初的 16 朵花由程序播下，其余由访客种下。
           </div>
-          <a
-            className="about-source"
-            href="https://github.com/ieuforu/little-garden"
-            target="_blank"
-            rel="noreferrer"
-          >
-            看看这个小实验的代码 ↗
+          <a className="about-source" href="https://github.com/ieuforu/little-garden"
+            target="_blank" rel="noreferrer">
+            项目源码 <span aria-hidden="true">↗</span>
           </a>
         </Dialog>
       )}
       {dialog === "verify" && (
-        <Dialog title="给花园一点保护。" onClose={closeDialog}>
-          <p>第一次种花前，做一次小小的验证。之后就可以安心播种啦。</p>
+        <Dialog title="种花前，验证一下" onClose={closeDialog}>
+          <p>用来拦住自动刷花的脚本，无需注册账号。</p>
           {config && (
             <Turnstile
               siteKey={config.siteKey}
-              onToken={(token) => {
-                void verified(token);
-              }}
+              onToken={(token) => { void verified(token); }}
             />
           )}
           <p className="verification-status" role="status">
-            {verifying
-              ? "正在确认，种子已经准备好了…"
-              : "验证完成后，会在你刚才选择的位置种下花。"}
+            {verifying ? "正在验证…" : "通过后，会在刚才选的位置种下花。"}
           </p>
         </Dialog>
       )}

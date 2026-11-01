@@ -38,7 +38,6 @@ export function Dialog({
       <button className="dialog-close" aria-label="关闭" onClick={onClose}>
         ×
       </button>
-      <span className="eyebrow">A SMALL MOMENT OF KINDNESS</span>
       <h2 id="dialog-title">{title}</h2>
       {children}
     </dialog>

@@ -42,10 +42,10 @@ export interface PlantRequest extends Point {
   palette: number;
 }
 export const palettes = [
-  { name: "日落橘", color: "#dc8a6d", center: "#f1d695", leaf: "#7b8b63" },
-  { name: "雾紫色", color: "#b8a2cd", center: "#eee3b6", leaf: "#7b927b" },
-  { name: "奶油黄", color: "#e5c374", center: "#8b7552", leaf: "#8b9769" },
-  { name: "海盐蓝", color: "#9cb8b8", center: "#f1deb1", leaf: "#6d8b7e" },
+  { name: "橘色", color: "#cc795b", center: "#f3d59a", leaf: "#77875d" },
+  { name: "紫色", color: "#aa8ebd", center: "#f1dfac", leaf: "#748c70" },
+  { name: "黄色", color: "#dab450", center: "#82704b", leaf: "#83905b" },
+  { name: "蓝色", color: "#7fa4b0", center: "#f3dfad", leaf: "#688577" },
 ] as const;
 
 // The HTTP acknowledgement can arrive before or after its WebSocket event.

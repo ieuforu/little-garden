@@ -149,3 +149,20 @@ Never run `docker compose down -v` as an update or rollback step: it removes the
 - Server-side secret files and a verified backup destination/retention policy.
 
 No deployment has occurred merely by creating or merging this repository or publishing its image. For direct mode, verify that only Caddy exposes the app and document the absence of edge protection. For tunnel mode, also verify there is no alternate public route to the garden API. Live domain verification, VPS load tests and browser checks are separate acceptance steps.
+
+### 已安装服务器的离线界面更新
+
+服务器无法访问 GitHub 时，可以使用 CI 发布资产生成仅含应用镜像的更新 ZIP：
+
+```sh
+python3 scripts/build_update.py --assets /path/to/release-assets --commit FULL_COMMIT --output little-garden-ui-update.zip
+python3 -I little-garden-ui-update.zip --verify-only
+```
+
+上传到服务器后，先按交付的 SHA-256 校验整个 ZIP，再运行：
+
+```sh
+sudo python3 -I little-garden-ui-update.zip
+```
+
+默认检查 `/srv/little-garden`（可用 `--directory` 指定）。更新包要求已安装的 Compose、部署和备份脚本与本次发行版一致，且存在有效的部署记录；遇到运行配置差异会停止。它校验镜像内容、架构和完整 commit，调用现有 `deploy.sh --local` 完成锁定、备份、健康检查和兼容版本回滚，不下载、不重填密钥、不改 Caddy、不替换数据卷。运行文件变化应按常规升级流程处理，不使用这个镜像更新包。`install-state.json` 记录首次安装，当前实际镜像以 `.local/deploy/current` 为准。

@@ -55,6 +55,7 @@ export function Turnstile({
           sitekey: siteKey,
           action: "plant",
           theme: "light",
+          size: container.current.clientWidth < 300 ? "compact" : "normal",
           language: "zh-cn",
           callback: (token: string) => {
             if (active) callback.current(token);

@@ -142,7 +142,7 @@ export class GardenRenderer {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.canvas.width = Math.round(this.width * this.dpr);
     this.canvas.height = Math.round(this.height * this.dpr);
-    if (first) this.camera.scale = Math.max(0.34, this.fitScale());
+    if (first) this.camera.scale = Math.max(0.28, this.fitScale());
     this.draw(performance.now());
   };
   private toWorld(point: Point): Point {
@@ -353,7 +353,7 @@ export class GardenRenderer {
     c.ellipse(f.x, baseY + 4, 20, 5, 0, 0, Math.PI * 2);
     c.fill();
     c.strokeStyle = p.leaf;
-    c.lineWidth = 2.7;
+    c.lineWidth = 2.3;
     c.lineCap = "round";
     c.beginPath();
     c.moveTo(f.x, baseY);
@@ -400,36 +400,43 @@ export class GardenRenderer {
     c.rotate(random(11) * 2 + sway * 0.005);
     const bloom = Math.max(0.001, Math.min(1, (grow - 0.35) / 0.65));
     c.scale(bloom, bloom);
-    const kind = f.seed % 3,
-      petals = kind === 0 ? 8 : kind === 1 ? 6 : 11;
+    const kind = f.palette % 4;
+    const petals = [5, 8, 11, 6][kind];
     for (let i = 0; i < petals; i++) {
       c.save();
-      c.rotate((i * Math.PI * 2) / petals);
+      c.rotate((i * Math.PI * 2) / petals + (random(130 + i) - 0.5) * 0.12);
+      const r = radius * (0.88 + random(210 + i) * 0.18);
+      const w = r * [0.62, 0.31, 0.19, 0.4][kind];
       c.fillStyle = p.color;
+      c.strokeStyle = p.ink;
+      c.lineWidth = 1.15;
       c.beginPath();
-      c.ellipse(
-        0,
-        -radius * 0.55,
-        radius * (kind === 1 ? 0.47 : 0.28),
-        radius * 0.57,
-        0,
-        0,
-        Math.PI * 2,
-      );
+      c.moveTo(-r * 0.1, r * 0.12);
+      c.bezierCurveTo(-w, -r * 0.24, -w * 1.12, -r * 0.84, -w * 0.46, -r);
+      if (kind === 1 || kind === 3) {
+        c.lineTo(-w * 0.12, -r * 0.94);
+        c.lineTo(w * 0.2, -r * 1.03);
+        c.lineTo(w * 0.5, -r * 0.95);
+      } else {
+        c.bezierCurveTo(-w * 0.12, -r * 1.08, w * 0.24, -r * 1.04, w * 0.48, -r * 0.96);
+      }
+      c.bezierCurveTo(w * 1.12, -r * 0.78, w * 0.9, -r * 0.2, r * 0.1, r * 0.12);
+      c.closePath();
       c.fill();
-      c.strokeStyle = "#fff6e929";
-      c.lineWidth = 1.5;
+      c.globalAlpha *= 0.55;
+      c.stroke();
+      c.lineWidth = 0.9;
       c.beginPath();
-      c.moveTo(0, -radius * 0.25);
-      c.quadraticCurveTo(4, -radius * 0.65, 0, -radius * 0.96);
+      c.moveTo(0, -r * 0.18);
+      c.quadraticCurveTo(-r * 0.06, -r * 0.52, r * 0.04, -r * 0.83);
       c.stroke();
       c.restore();
     }
     c.fillStyle = p.center;
     c.beginPath();
-    c.arc(0, 0, radius * 0.23, 0, Math.PI * 2);
+    c.arc(0, 0, radius * (kind === 2 ? 0.25 : 0.17), 0, Math.PI * 2);
     c.fill();
-    c.fillStyle = "#6c624c65";
+    c.fillStyle = kind === 0 ? "#ead4a6" : "#6c624c80";
     for (let i = 0; i < 7; i++) {
       const a = i * 2.4;
       const r = Math.sqrt(i) * radius * 0.055;

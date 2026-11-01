@@ -53,18 +53,34 @@ function SoundIcon({ enabled }: { enabled: boolean }) {
     </svg>
   );
 }
-function ShuffleIcon() {
+function ArrowIcon() {
+  return <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12 12 4M4 4h8v8" /></svg>;
+}
+function SeedIcon() {
   return (
-    <svg
-      width="17"
-      height="17"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      aria-hidden="true"
-    >
-      <path d="M3 6h3c5 0 6 12 11 12h4m-4-4 4 4-4 4M3 18h3c5 0 6-12 11-12h4m-4-4 4 4-4 4" />
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20v-9m0 4c-6 0-8-4-8-7 5 0 8 2 8 7Zm0-4c0-5 3-8 8-8 0 5-3 8-8 8ZM8 21h8" />
+    </svg>
+  );
+}
+function Specimen({ index }: { index: number }) {
+  const p = palettes[index];
+  const petals = [5, 8, 11, 6][index];
+  return (
+    <svg width="42" height="57" viewBox="0 0 42 64" fill="none" aria-hidden="true">
+      <path d="M20 60C29 46 15 31 21 20" stroke={p.leaf} strokeWidth="1.1" />
+      <path d="M22 47C28 46 32 39 32 36C24 39 22 42 22 47ZM22 39C16 38 12 34 12 30C20 31 23 35 22 39Z" fill={p.leaf} opacity=".8" />
+      <g transform="translate(21 18)" fill={p.color} stroke={p.ink} strokeWidth=".45">
+        {Array.from({ length: petals }, (_, i) => (
+          <path key={i} transform={`rotate(${i * 360 / petals})`} d={index === 0
+            ? "M0 2C-12-1-12-12-5-14C-2-16 3-15 6-12C12-7 7 0 0 2Z"
+            : index === 2
+              ? "M0 1C-5-5-4-15 0-16C4-15 5-5 0 1Z"
+              : "M0 2C-7-3-8-11-3-14L0-13L3-15C8-10 6-3 0 2Z"} />
+        ))}
+        <circle r={index === 2 ? 4.5 : 3.2} fill={p.center} stroke="none" />
+        <circle r="1.1" fill={p.ink} stroke="none" />
+      </g>
     </svg>
   );
 }
@@ -276,13 +292,13 @@ export default function App() {
           <span>little garden</span>
         </a>
         <nav aria-label="主导航">
-          <button onClick={() => setDialog("about")}>怎么玩</button>
+          <button onClick={() => setDialog("about")}>关于花园</button>
           <a
             href="https://github.com/ieuforu/little-garden"
             target="_blank"
             rel="noreferrer"
           >
-            GitHub <span aria-hidden="true">↗</span>
+            GitHub <ArrowIcon />
           </a>
         </nav>
       </header>
@@ -291,26 +307,17 @@ export default function App() {
         <section className="intro" aria-labelledby="page-title">
           <div>
             <h1 id="page-title">一起种花</h1>
-            <p>选个颜色，点一下空地。</p>
+            <p>选个颜色，在空地种下一朵。</p>
           </div>
-          <div
-            className={`connection ${connected ? "is-connected" : ""}`}
-            role="status"
-          >
-            <span aria-hidden="true" />
-            {connected
-              ? "实时同步中"
-              : connection === "offline"
-                ? "暂时离线"
-                : "正在连接…"}
-          </div>
+
         </section>
 
         <section className="garden-section" aria-label="共享花园">
           <div className="garden-topline">
             <div className="garden-meta">
+              <SeedIcon />
               <span className="garden-index">
-                花田 <span>{String(snapshot?.garden.id ?? 1).padStart(3, "0")}</span>
+                第 {snapshot?.garden.id ?? 1} 块花田
               </span>
               <span className="meta-divider" aria-hidden="true">/</span>
               <span className="flower-count">
@@ -397,9 +404,9 @@ export default function App() {
                   disabled={!!pending || verifying}
                   onClick={() => setPalette(i)}
                 >
-                  <Bloom color={p.color} size={28} />
+                  <Specimen index={i} />
                   <span>{p.name}</span>
-                  <span className="seed-selected-mark" aria-hidden="true" />
+                  <span className="seed-selected-mark" aria-hidden="true">✓</span>
                 </button>
               ))}
             </div>
@@ -415,7 +422,7 @@ export default function App() {
               }
               onClick={chooseSpot}
             >
-              <ShuffleIcon />
+              <SeedIcon />
               <span>{pending ? "正在种下…" : "随机种一朵"}</span>
             </button>
           </div>
@@ -446,8 +453,19 @@ export default function App() {
 
       <footer className="site-footer">
         <a href="https://github.com/ieuforu" target="_blank" rel="noreferrer">
-          by ieuforu <span aria-hidden="true">↗</span>
+          by ieuforu <ArrowIcon />
         </a>
+          <div
+            className={`connection ${connected ? "is-connected" : ""}`}
+            role="status"
+          >
+            <span aria-hidden="true" />
+            {connected
+              ? "实时同步中"
+              : connection === "offline"
+                ? "暂时离线"
+                : "正在连接…"}
+          </div>
         <span>本次种下 <strong>{mine}</strong> 朵</span>
       </footer>
 
@@ -465,7 +483,7 @@ export default function App() {
           </div>
           <a className="about-source" href="https://github.com/ieuforu/little-garden"
             target="_blank" rel="noreferrer">
-            项目源码 <span aria-hidden="true">↗</span>
+            项目源码 <ArrowIcon />
           </a>
         </Dialog>
       )}

@@ -52,7 +52,7 @@ button:focus-visible, a:focus-visible, canvas:focus-visible {
   flex-direction: column;
 }
 .site-header {
-  height: 82px;
+  height: 68px;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -98,7 +98,7 @@ main {
 .intro {
   flex: 0 0 auto;
   text-align: center;
-  padding: 20px 0 25px;
+  padding: 6px 0 14px;
 }
 h1 {
   font-family: "Noto Serif CJK SC", "Songti SC", "STSong", "SimSun", serif;
@@ -113,7 +113,7 @@ h1 {
   font-size: 12px;
   line-height: 1.8;
   letter-spacing: 1px;
-  margin: 12px 0 0;
+  margin: 8px 0 0;
 }
 .garden-section {
   flex: 1;
@@ -203,7 +203,7 @@ h1 {
   align-items: center;
   justify-content: center;
   gap: 32px;
-  padding: 20px 0 8px;
+  padding: 12px 0 8px;
 }
 .seed-picker {
   display: flex;
@@ -521,7 +521,7 @@ h1 {
     padding: 0 23px;
   }
   .site-header {
-    height: 66px;
+    height: 60px;
   }
   .wordmark {
     gap: 8px;
@@ -538,7 +538,7 @@ h1 {
     font-size: 11px;
   }
   .intro {
-    padding: 17px 0 21px;
+    padding: 6px 0 14px;
   }
   h1 {
     font-size: 35px;
@@ -546,7 +546,7 @@ h1 {
   }
   .intro p {
     font-size: 11px;
-    margin-top: 10px;
+    margin-top: 8px;
     letter-spacing: .5px;
   }
   .garden-topline {
@@ -572,8 +572,8 @@ h1 {
   }
   .plant-toolbar {
     flex-direction: column;
-    gap: 17px;
-    padding: 14px 0 5px;
+    gap: 12px;
+    padding: 10px 0 5px;
   }
   .seed-picker {
     gap: 14px;
